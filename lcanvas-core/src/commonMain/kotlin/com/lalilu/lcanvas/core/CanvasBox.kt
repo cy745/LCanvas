@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import kotlinx.coroutines.coroutineScope
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.Placeable
 
 expect fun Modifier.pointerScroll(onScroll: (PointerEvent) -> Unit): Modifier
 
@@ -64,12 +65,15 @@ fun CanvasBox(
                         onDragEnd = {
                             val v = velocityTracker.calculateVelocity()
                             val velocity = Offset(v.x, v.y)
-                            launch { state.flingBy(velocity) }
+                            launch { state.fling(velocity) }
                         },
                         onDrag = { change, dragAmount ->
                             change.consume()
                             velocityTracker.addPosition(change.uptimeMillis, change.position)
-                            launch { state.pan(dragAmount) }
+                            launch {
+                                state.cancelFling()
+                                state.pan(dragAmount)
+                            }
                         }
                     )
                 }
@@ -108,7 +112,7 @@ fun CanvasBox(
                     visible.add(VisibleItem(i, renderRect, logicRect))
                 }
 
-                val placeables: List<Pair<VisibleItem, androidx.compose.ui.layout.Placeable>> = visible.map { v ->
+                val placeables: List<Pair<VisibleItem, Placeable>> = visible.map { v ->
                     val childConstraints = Constraints.fixed(
                         v.renderRect.width.toInt().coerceAtLeast(0),
                         v.renderRect.height.toInt().coerceAtLeast(0)

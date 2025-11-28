@@ -64,7 +64,11 @@ class CanvasState(
         translation = focalRender - Offset(logicAtFocal.x * newScale, logicAtFocal.y * newScale)
     }
 
-    suspend fun flingBy(
+    suspend fun cancelFling() = withContext(Dispatchers.Unconfined) {
+        flingMutex.mutate {}
+    }
+
+    suspend fun fling(
         initialVelocityRender: Offset,
         deceleration: Float = flingDeceleration,
         stopThreshold: Float = flingStopVelocityThreshold
