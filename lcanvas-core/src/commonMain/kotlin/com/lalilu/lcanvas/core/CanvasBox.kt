@@ -176,7 +176,12 @@ private class CanvasItemsProvider(
             scale = state.scale,
         )
 
-        val itemState = host.states[index]
+        var itemState = host.states[index]
+        if (itemState.key != key) {
+            itemState = host.states.firstOrNull { it.key == key }
+                ?: itemState
+        }
+
         itemState.content
             .invoke(childScope, index)
     }
