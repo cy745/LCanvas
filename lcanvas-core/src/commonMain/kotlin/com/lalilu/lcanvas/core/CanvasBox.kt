@@ -2,6 +2,7 @@ package com.lalilu.lcanvas.core
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.layout.LazyLayout
 import androidx.compose.foundation.lazy.layout.LazyLayoutItemProvider
@@ -16,6 +17,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.launch
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import kotlinx.coroutines.coroutineScope
+import androidx.compose.ui.geometry.Offset
 
 expect fun Modifier.pointerScroll(onScroll: (PointerEvent) -> Unit): Modifier
 
@@ -50,6 +55,23 @@ fun CanvasBox(
                     // 以手势质心为锚点缩放
                     state.anchorZoom(centroid, zoom)
                     onViewportChanged?.invoke(state.viewportLogicRect())
+                }
+            }
+            .pointerInput(Unit) {
+                val velocityTracker = VelocityTracker()
+                coroutineScope {
+                    detectDragGestures(
+                        onDragEnd = {
+                            val v = velocityTracker.calculateVelocity()
+                            val velocity = Offset(v.x, v.y)
+                            launch { state.flingBy(velocity) }
+                        },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            velocityTracker.addPosition(change.uptimeMillis, change.position)
+                            launch { state.pan(dragAmount) }
+                        }
+                    )
                 }
             }
     ) {

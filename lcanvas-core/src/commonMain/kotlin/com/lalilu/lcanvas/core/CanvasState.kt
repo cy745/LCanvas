@@ -1,16 +1,25 @@
 package com.lalilu.lcanvas.core
 
+import androidx.compose.foundation.MutatorMutex
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+import kotlin.math.sqrt
 
 @Stable
 class CanvasState(
     initialScale: Float = 1f,
     initialTranslation: Offset = Offset.Zero,
+    val flingDeceleration: Float = 6000f,
+    val flingStopVelocityThreshold: Float = 1f,
     overscanPx: Float = 256f
 ) {
+    var flingMutex = MutatorMutex()
     var scale by mutableFloatStateOf(initialScale)
         private set
 
@@ -54,11 +63,50 @@ class CanvasState(
         scale = newScale
         translation = focalRender - Offset(logicAtFocal.x * newScale, logicAtFocal.y * newScale)
     }
+
+    suspend fun flingBy(
+        initialVelocityRender: Offset,
+        deceleration: Float = flingDeceleration,
+        stopThreshold: Float = flingStopVelocityThreshold
+    ) = withContext(Dispatchers.Unconfined) {
+        flingMutex.mutate {
+            var vx = initialVelocityRender.x
+            var vy = initialVelocityRender.y
+            var lastTime = 0L
+            yield()
+            withFrameNanos { time -> lastTime = time }
+            while (isActive && sqrt((vx * vx + vy * vy).toDouble()) > stopThreshold) {
+                withFrameNanos { now ->
+                    val dtSec = (now - lastTime) / 1_000_000_000.0
+                    lastTime = now
+                    translation += Offset((vx * dtSec).toFloat(), (vy * dtSec).toFloat())
+                    val speed = sqrt((vx * vx + vy * vy).toDouble())
+                    val dec = deceleration * dtSec
+                    val newSpeed = (speed - dec).coerceAtLeast(0.0)
+                    if (speed > 0.0) {
+                        val ratio = if (speed == 0.0) 0.0 else newSpeed / speed
+                        vx = (vx * ratio).toFloat()
+                        vy = (vy * ratio).toFloat()
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
 fun rememberCanvasState(
     initialScale: Float = 1f,
     initialTranslation: Offset = Offset.Zero,
+    flingDeceleration: Float = 6000f,
+    flingStopVelocityThreshold: Float = 10f,
     overscanPx: Float = 256f
-): CanvasState = remember { CanvasState(initialScale, initialTranslation, overscanPx) }
+): CanvasState = remember {
+    CanvasState(
+        initialScale = initialScale,
+        initialTranslation = initialTranslation,
+        flingDeceleration = flingDeceleration,
+        flingStopVelocityThreshold = flingStopVelocityThreshold,
+        overscanPx = overscanPx
+    )
+}
