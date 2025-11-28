@@ -76,6 +76,7 @@ fun CanvasBox(
                 }
             }
     ) {
+        itemsHost.reset()
         content(CanvasScope(itemsHost))
 
         LazyLayout(
@@ -95,8 +96,7 @@ fun CanvasBox(
                 val t = state.transform()
                 val visible = mutableListOf<VisibleItem>()
                 for (i in itemsHost.states.indices) {
-                    val it = itemsHost.states[i].layout
-                    val logicRect = Rect(it.x, it.y, it.x + it.width, it.y + it.height)
+                    val logicRect = itemsHost.states[i].layout()
                     val renderRect = t.logicToRender(logicRect)
 
                     if (renderRect.overlaps(viewportRect)) {
@@ -126,8 +126,8 @@ fun CanvasBox(
 
 @Immutable
 data class CanvasItemState(
-    val layout: CanvasItemLayout,
-    val content: @Composable CanvasChildScope.(Int) -> Unit,
+    val layout: () -> Rect,
+    val content: @Composable CanvasChildScope.() -> Unit,
     val key: Any
 )
 
@@ -136,23 +136,42 @@ private class ItemsHostImpl(
 ) : CanvasItemsScope {
     val states = mutableListOf<CanvasItemState>()
 
+    fun reset() {
+        states.clear()
+    }
+
     override fun items(
         count: Int,
         key: ((Int) -> Any)?,
-        layoutInfo: (Int) -> CanvasItemLayout,
+        layoutInfo: (Int) -> Rect,
         measureStrategy: (Int) -> MeasureStrategy,
         itemContent: @Composable CanvasChildScope.(index: Int) -> Unit
     ) {
-        states.clear()
         for (i in 0 until count) {
             states.add(
-                i, CanvasItemState(
-                    layout = layoutInfo(i),
-                    content = itemContent,
+                CanvasItemState(
+                    layout = { layoutInfo(i) },
+                    content = { itemContent(i) },
                     key = key?.invoke(i) ?: i
                 )
             )
         }
+    }
+
+    override fun <T : Any> items(
+        items: List<T>,
+        key: ((T) -> Any)?,
+        layoutInfo: (T) -> Rect,
+        measureStrategy: (T) -> MeasureStrategy,
+        itemContent: @Composable (CanvasChildScope.(item: T) -> Unit)
+    ) {
+        states.addAll(items.map {
+            CanvasItemState(
+                layout = { layoutInfo(it) },
+                content = { itemContent(it) },
+                key = key?.invoke(it) ?: it
+            )
+        })
     }
 }
 
@@ -182,7 +201,6 @@ private class CanvasItemsProvider(
                 ?: itemState
         }
 
-        itemState.content
-            .invoke(childScope, index)
+        itemState.content.invoke(childScope)
     }
 }

@@ -31,12 +31,14 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.ui)
             implementation("io.github.oleksandrbalan:minabox:1.10.0")
+            implementation("io.github.oshai:kotlin-logging:7.0.13")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
+            implementation("ch.qos.logback:logback-classic:1.5.21")
         }
     }
 }

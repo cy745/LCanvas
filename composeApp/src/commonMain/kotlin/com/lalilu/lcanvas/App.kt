@@ -2,20 +2,25 @@ package com.lalilu.lcanvas
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeContentPadding
+import androidx.compose.foundation.gestures.draggable2D
+import androidx.compose.foundation.gestures.rememberDraggable2DState
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.lalilu.lcanvas.core.CanvasBox
 import com.lalilu.lcanvas.core.CanvasChildScope
-import com.lalilu.lcanvas.core.CanvasItemLayout
 import com.lalilu.lcanvas.core.rememberCanvasState
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -38,6 +43,19 @@ fun App() {
 @Composable
 private fun DemoCanvas() {
     val state = rememberCanvasState(overscanPx = 512f)
+    val list = remember {
+        listOf(
+            FloatItem(key = "hello world") {
+                androidx.compose.material3.Text(
+                    text = "Hello World",
+                    color = Color(0xFF0D47A1),
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+            }
+        )
+    }
+
     CanvasBox(state = state, modifier = Modifier.fillMaxSize()) {
         val count = 100
         val cols = 10
@@ -53,6 +71,13 @@ private fun DemoCanvas() {
         }
 
         items(
+            items = list,
+            key = { it.key },
+            layoutInfo = { it.rect.value },
+            itemContent = { with(it) { Content() } }
+        )
+
+        items(
             count = count,
             key = { i -> i },
             layoutInfo = { i ->
@@ -64,10 +89,37 @@ private fun DemoCanvas() {
                 val jitterY = (cellH - itemH) * prand(i * 2 + 13)
                 val x = baseX + jitterX
                 val y = baseY + jitterY
-                CanvasItemLayout(x = x, y = y, width = itemW, height = itemH)
+                Rect(Offset(x = x, y = y), Size(width = itemW, height = itemH))
             }
         ) { index ->
             Cell(index = index, scope = this)
+        }
+    }
+}
+
+data class FloatItem(
+    val key: String,
+    val rect: MutableState<Rect> = mutableStateOf(Rect(Offset.Zero, Size(500f, 500f))),
+    private val content: @Composable BoxScope.() -> Unit = {}
+) {
+
+    @Composable
+    fun CanvasChildScope.Content(modifier: Modifier = Modifier) {
+        val dragging = remember { mutableStateOf(false) }
+        val draggable = rememberDraggable2DState {
+            rect.value = rect.value.translate(it / scale)
+        }
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .border(width = 1.dp, color = Color.Red)
+                .draggable2D(
+                    state = draggable,
+                    onDragStarted = { dragging.value = true },
+                    onDragStopped = { dragging.value = false }
+                )
+        ) {
+            content()
         }
     }
 }
