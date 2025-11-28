@@ -15,7 +15,7 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_11)
         }
     }
-    
+
     listOf(
         iosArm64(),
         iosSimulatorArm64()
@@ -25,20 +25,20 @@ kotlin {
             isStatic = true
         }
     }
-    
+
     jvm()
-    
-    js {
+
+    wasmJs {
         browser()
         binaries.executable()
     }
-    
+
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser()
         binaries.executable()
     }
-    
+
     sourceSets {
         androidMain.dependencies {
             implementation(compose.preview)
@@ -53,7 +53,9 @@ kotlin {
             implementation(compose.components.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
+            implementation("io.github.oleksandrbalan:minabox:1.10.0")
             implementation(projects.shared)
+            implementation(projects.lcanvasCore)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
