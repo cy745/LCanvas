@@ -22,7 +22,7 @@ class CanvasTransform(
     )
 
     fun viewportLogicRect(viewportSize: IntSize): Rect = renderToLogic(
-        Rect(Offset.Zero, Offset(viewportSize.width.toFloat(), viewportSize.height.toFloat()))
+        Rect(0f, 0f, viewportSize.width.toFloat(), viewportSize.height.toFloat())
     )
 }
 
