@@ -10,10 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import com.github.panpf.sketch.AsyncImage
-import com.lalilu.lcanvas.core.CanvasBox
-import com.lalilu.lcanvas.core.FloatItem
-import com.lalilu.lcanvas.core.MeasureStrategy
-import com.lalilu.lcanvas.core.rememberCanvasState
+import com.lalilu.lcanvas.core.*
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 @Composable
@@ -34,20 +31,28 @@ fun App() {
 @Composable
 private fun DemoCanvas() {
     val state = rememberCanvasState(overscanPx = 512f)
+    val floatItemState = rememberFloatItemState()
+
     val list = remember {
         listOf(
-            FloatItem(key = "hello world") {
+            FloatItem(
+                key = "hello world",
+                state = floatItemState
+            ) {
                 AsyncImage(
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Inside,
+                    contentScale = ContentScale.Crop,
                     contentDescription = "",
                     uri = "https://www.dmoe.cc/random.php"
                 )
             },
-            FloatItem(key = "hello world2") {
+            FloatItem(
+                key = "hello world2",
+                state = floatItemState
+            ) {
                 AsyncImage(
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Inside,
+                    contentScale = ContentScale.Crop,
                     contentDescription = "",
                     uri = "https://www.dmoe.cc/random.php"
                 )
@@ -60,7 +65,8 @@ private fun DemoCanvas() {
             items = list,
             key = { it.key },
             layoutInfo = { it.layout.value },
-            measureStrategy = { item -> MeasureStrategy.WrapContent { rect -> item.updateLayout { copy(rect = rect) } } },
+            onUpdateLayoutInfo = { item, layout -> item.updateLayout { layout } },
+            scaleStrategy = { ScaleStrategy.ScaleInRender },
             itemContent = { with(it) { Content() } }
         )
     }
