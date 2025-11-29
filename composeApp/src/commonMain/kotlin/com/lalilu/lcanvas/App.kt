@@ -16,9 +16,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.github.panpf.sketch.AsyncImage
 import com.lalilu.lcanvas.core.CanvasBox
 import com.lalilu.lcanvas.core.CanvasChildScope
 import com.lalilu.lcanvas.core.rememberCanvasState
@@ -46,11 +48,11 @@ private fun DemoCanvas() {
     val list = remember {
         listOf(
             FloatItem(key = "hello world") {
-                androidx.compose.material3.Text(
-                    text = "Hello World",
-                    color = Color(0xFF0D47A1),
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center
+                AsyncImage(
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Inside,
+                    contentDescription = "",
+                    uri = "https://www.dmoe.cc/random.php"
                 )
             }
         )
@@ -71,13 +73,6 @@ private fun DemoCanvas() {
         }
 
         items(
-            items = list,
-            key = { it.key },
-            layoutInfo = { it.rect.value },
-            itemContent = { with(it) { Content() } }
-        )
-
-        items(
             count = count,
             key = { i -> i },
             layoutInfo = { i ->
@@ -94,13 +89,20 @@ private fun DemoCanvas() {
         ) { index ->
             Cell(index = index, scope = this)
         }
+
+        items(
+            items = list,
+            key = { it.key },
+            layoutInfo = { it.rect.value },
+            itemContent = { with(it) { Content() } }
+        )
     }
 }
 
 data class FloatItem(
     val key: String,
     val rect: MutableState<Rect> = mutableStateOf(Rect(Offset.Zero, Size(500f, 500f))),
-    private val content: @Composable BoxScope.() -> Unit = {}
+    private val content: @Composable BoxScope.(FloatItem) -> Unit = {}
 ) {
 
     @Composable
@@ -119,7 +121,7 @@ data class FloatItem(
                     onDragStopped = { dragging.value = false }
                 )
         ) {
-            content()
+            content(this@FloatItem)
         }
     }
 }

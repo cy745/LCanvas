@@ -56,6 +56,12 @@ kotlin {
             implementation("io.github.oleksandrbalan:minabox:1.10.0")
             implementation(projects.shared)
             implementation(projects.lcanvasCore)
+
+            // Provides the core functions of Sketch as well as singletons and extension
+            // functions that rely on singleton implementations
+            implementation("io.github.panpf.sketch4:sketch-compose:4.4.0-alpha01")
+            // Provides the ability to load network images
+            implementation("io.github.panpf.sketch4:sketch-http:4.4.0-alpha01")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.PointerEvent
@@ -20,6 +21,9 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.Color
+import kotlin.math.ceil
+import kotlin.math.floor
 
 expect fun Modifier.pointerScroll(onScroll: (PointerEvent) -> Unit): Modifier
 
@@ -73,6 +77,29 @@ fun CanvasBox(
                             }
                         }
                     )
+                }
+            }
+            .drawBehind {
+                val grid = 10f
+                val t = state.transform()
+                val logic = state.viewportLogicRect()
+                val startX = floor(logic.left / grid) * grid
+                val endX = ceil(logic.right / grid) * grid
+                val startY = floor(logic.top / grid) * grid
+                val endY = ceil(logic.bottom / grid) * grid
+                var x = startX
+                while (x <= endX) {
+                    val p1 = t.logicToRender(Offset(x, startY))
+                    val p2 = t.logicToRender(Offset(x, endY))
+                    drawLine(Color(0xFFEEEEEE), p1, p2, 1f)
+                    x += grid
+                }
+                var y = startY
+                while (y <= endY) {
+                    val p1 = t.logicToRender(Offset(startX, y))
+                    val p2 = t.logicToRender(Offset(endX, y))
+                    drawLine(Color(0xFFEEEEEE), p1, p2, 1f)
+                    y += grid
                 }
             }
     ) {
