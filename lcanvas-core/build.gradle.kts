@@ -30,6 +30,7 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.ui)
+            implementation(compose.material)
             implementation("io.github.oleksandrbalan:minabox:1.10.0")
             implementation("io.github.oshai:kotlin-logging:7.0.13")
         }

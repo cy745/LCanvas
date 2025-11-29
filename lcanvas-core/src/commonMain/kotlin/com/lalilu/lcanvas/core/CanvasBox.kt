@@ -119,6 +119,7 @@ fun CanvasBox(
                     val logicRect = layout.rect
                     var renderRect = t.logicToRender(logicRect)
                     var measureStrategy: MeasureStrategy? = null
+                    val scStrategy = itemsHost.states[i].scaleStrategy()
 
                     // 若元素的逻辑矩形和渲染矩形都为空，则需要处理用户测量策略
                     if (logicRect.isEmpty && renderRect.isEmpty) {
@@ -154,7 +155,8 @@ fun CanvasBox(
                                 renderRect = renderRect,
                                 logicRect = logicRect,
                                 updateTime = layout.updateTime,
-                                measureStrategy = measureStrategy
+                                measureStrategy = measureStrategy,
+                                scaleStrategy = scStrategy
                             )
                         )
                     }
@@ -172,10 +174,16 @@ fun CanvasBox(
                                     maxHeight = Int.MAX_VALUE
                                 )
                             } else {
-                                Constraints.fixed(
-                                    v.renderRect.width.toInt().coerceAtLeast(0),
-                                    v.renderRect.height.toInt().coerceAtLeast(0)
-                                )
+                                when (v.scaleStrategy) {
+                                    is ScaleStrategy.ScaleInMeasure -> Constraints.fixed(
+                                        v.renderRect.width.toInt().coerceAtLeast(0),
+                                        v.renderRect.height.toInt().coerceAtLeast(0)
+                                    )
+                                    is ScaleStrategy.ScaleInRender -> Constraints.fixed(
+                                        v.logicRect.width.toInt().coerceAtLeast(0),
+                                        v.logicRect.height.toInt().coerceAtLeast(0)
+                                    )
+                                }
                             }
 
                         val measurables = compose(v.index)
@@ -269,6 +277,7 @@ fun Modifier.drawBgGrid(
 data class CanvasItemState(
     val layout: () -> CanvasItemLayout,
     val measureStrategy: () -> MeasureStrategy,
+    val scaleStrategy: () -> ScaleStrategy,
     val content: @Composable CanvasChildScope.() -> Unit,
     val key: Any
 )
@@ -287,6 +296,7 @@ private class ItemsHostImpl(
         key: ((Int) -> Any)?,
         layoutInfo: (Int) -> CanvasItemLayout,
         measureStrategy: (Int) -> MeasureStrategy,
+        scaleStrategy: (Int) -> ScaleStrategy,
         itemContent: @Composable CanvasChildScope.(index: Int) -> Unit
     ) {
         for (i in 0 until count) {
@@ -295,6 +305,7 @@ private class ItemsHostImpl(
                     layout = { layoutInfo(i) },
                     content = { itemContent(i) },
                     measureStrategy = { measureStrategy(i) },
+                    scaleStrategy = { scaleStrategy(i) },
                     key = key?.invoke(i) ?: i
                 )
             )
@@ -306,6 +317,7 @@ private class ItemsHostImpl(
         key: ((T) -> Any)?,
         layoutInfo: (T) -> CanvasItemLayout,
         measureStrategy: (T) -> MeasureStrategy,
+        scaleStrategy: (T) -> ScaleStrategy,
         itemContent: @Composable (CanvasChildScope.(item: T) -> Unit)
     ) {
         states.addAll(items.map {
@@ -313,6 +325,7 @@ private class ItemsHostImpl(
                 layout = { layoutInfo(it) },
                 content = { itemContent(it) },
                 measureStrategy = { measureStrategy(it) },
+                scaleStrategy = { scaleStrategy(it) },
                 key = key?.invoke(it) ?: it
             )
         })
@@ -326,6 +339,7 @@ private data class VisibleItem(
     val renderRect: Rect,
     val logicRect: Rect,
     val measureStrategy: MeasureStrategy? = null,
+    val scaleStrategy: ScaleStrategy = ScaleStrategy.ScaleInMeasure,
 )
 
 private class CanvasItemsProvider(
@@ -340,6 +354,7 @@ private class CanvasItemsProvider(
         val childScope = CanvasChildScope(
             transform = state.transform(),
             scale = state.scale,
+            scaleStrategy = host.states[index].scaleStrategy(),
         )
 
         var itemState = host.states[index]

@@ -10,6 +10,11 @@ sealed class MeasureStrategy {
     data class WrapContent(val onMeasured: (logicRect: Rect) -> Unit) : MeasureStrategy()
 }
 
+sealed class ScaleStrategy {
+    data object ScaleInMeasure : ScaleStrategy()
+    data object ScaleInRender : ScaleStrategy()
+}
+
 @Stable
 data class CanvasItemLayout(
     val zIndex: Float = 0f,
@@ -26,6 +31,7 @@ data class CanvasItemLayout(
 data class CanvasChildScope(
     val transform: CanvasTransform,
     val scale: Float,
+    val scaleStrategy: ScaleStrategy,
 )
 
 interface CanvasItemsScope {
@@ -34,6 +40,7 @@ interface CanvasItemsScope {
         key: ((Int) -> Any)? = null,
         layoutInfo: (Int) -> CanvasItemLayout = { CanvasItemLayout.Default },
         measureStrategy: (Int) -> MeasureStrategy = { MeasureStrategy.WrapContent {} },
+        scaleStrategy: (Int) -> ScaleStrategy = { ScaleStrategy.ScaleInMeasure },
         itemContent: @Composable CanvasChildScope.(index: Int) -> Unit
     )
 
@@ -42,6 +49,7 @@ interface CanvasItemsScope {
         key: ((T) -> Any)? = null,
         layoutInfo: (T) -> CanvasItemLayout = { CanvasItemLayout.Default },
         measureStrategy: (T) -> MeasureStrategy = { MeasureStrategy.WrapContent {} },
+        scaleStrategy: (T) -> ScaleStrategy = { ScaleStrategy.ScaleInMeasure },
         itemContent: @Composable CanvasChildScope.(item: T) -> Unit
     )
 }
