@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -36,7 +37,7 @@ fun CanvasBox(
     gridCellWidth: Float = 10f,
     xAxisColor: Color = Color.Blue.copy(0.3f),
     yAxisColor: Color = Color.Red.copy(0.3f),
-    gridColor: Color = Color(0xFF787878).copy(0.3f),
+    gridColor: Color = Color(0xFF787878).copy(0.15f),
     content: @Composable CanvasItemsScope.() -> Unit
 ) {
     val itemsHost = remember { ItemsHostImpl(state) }
@@ -112,27 +113,98 @@ fun CanvasBox(
                 val t = state.transform()
                 val visible = mutableListOf<VisibleItem>()
                 for (i in itemsHost.states.indices) {
-                    val logicRect = itemsHost.states[i].layout()
-                    val renderRect = t.logicToRender(logicRect)
+                    val layout = itemsHost.states[i].layout()
+                    if (!layout.isVisible) continue
+
+                    val logicRect = layout.rect
+                    var renderRect = t.logicToRender(logicRect)
+                    var measureStrategy: MeasureStrategy? = null
+
+                    // 若元素的逻辑矩形和渲染矩形都为空，则需要处理用户测量策略
+                    if (logicRect.isEmpty && renderRect.isEmpty) {
+                        measureStrategy = itemsHost.states[i].measureStrategy()
+                        renderRect = when (measureStrategy) {
+                            is MeasureStrategy.WrapContent -> {
+                                Rect(
+                                    offset = renderRect.topLeft,
+                                    size = Size(
+                                        width = Float.MAX_VALUE,
+                                        height = Float.MAX_VALUE
+                                    )
+                                )
+                            }
+
+                            is MeasureStrategy.Fixed -> {
+                                Rect(
+                                    offset = renderRect.topLeft,
+                                    size = Size(
+                                        width = measureStrategy.width.toPx(),
+                                        height = measureStrategy.height.toPx()
+                                    )
+                                )
+                            }
+                        }
+                    }
 
                     if (renderRect.overlaps(viewportRect)) {
-                        visible.add(VisibleItem(i, renderRect, logicRect))
+                        visible.add(
+                            VisibleItem(
+                                index = i,
+                                zIndex = layout.zIndex,
+                                renderRect = renderRect,
+                                logicRect = logicRect,
+                                updateTime = layout.updateTime,
+                                measureStrategy = measureStrategy
+                            )
+                        )
                     }
                 }
 
-                val placeables: List<Pair<VisibleItem, Placeable>> = visible.map { v ->
-                    val childConstraints = Constraints.fixed(
-                        v.renderRect.width.toInt().coerceAtLeast(0),
-                        v.renderRect.height.toInt().coerceAtLeast(0)
-                    )
-                    val measurables = compose(v.index)
-                    val p = measurables.first().measure(childConstraints)
-                    Pair(v, p)
-                }
+                val placeables: List<Pair<VisibleItem, Placeable>> = visible
+                    .sortedBy { it.updateTime }
+                    .map { v ->
+                        val childConstraints =
+                            if (v.renderRect.width == Float.MAX_VALUE || v.renderRect.height == Float.MAX_VALUE) {
+                                constraints.copy(
+                                    minWidth = 0,
+                                    minHeight = 0,
+                                    maxWidth = Int.MAX_VALUE,
+                                    maxHeight = Int.MAX_VALUE
+                                )
+                            } else {
+                                Constraints.fixed(
+                                    v.renderRect.width.toInt().coerceAtLeast(0),
+                                    v.renderRect.height.toInt().coerceAtLeast(0)
+                                )
+                            }
+
+                        val measurables = compose(v.index)
+                        val p = measurables.first().measure(childConstraints)
+
+                        // 处理用户测量策略
+                        if (v.measureStrategy is MeasureStrategy.WrapContent) {
+                            val newLogicRect = t.renderToLogic(
+                                Rect(
+                                    offset = v.renderRect.topLeft,
+                                    size = Size(
+                                        width = p.measuredWidth.toFloat(),
+                                        height = p.measuredHeight.toFloat()
+                                    )
+                                )
+                            )
+                            v.measureStrategy.onMeasured(newLogicRect)
+                        }
+
+                        Pair(v, p)
+                    }
 
                 layout(viewportSize.width, viewportSize.height) {
                     placeables.forEach { (v, p) ->
-                        p.place(v.renderRect.left.toInt(), v.renderRect.top.toInt())
+                        p.place(
+                            x = v.renderRect.left.toInt(),
+                            y = v.renderRect.top.toInt(),
+                            zIndex = v.zIndex
+                        )
                     }
                 }
             }
@@ -195,7 +267,8 @@ fun Modifier.drawBgGrid(
 
 @Immutable
 data class CanvasItemState(
-    val layout: () -> Rect,
+    val layout: () -> CanvasItemLayout,
+    val measureStrategy: () -> MeasureStrategy,
     val content: @Composable CanvasChildScope.() -> Unit,
     val key: Any
 )
@@ -212,7 +285,7 @@ private class ItemsHostImpl(
     override fun items(
         count: Int,
         key: ((Int) -> Any)?,
-        layoutInfo: (Int) -> Rect,
+        layoutInfo: (Int) -> CanvasItemLayout,
         measureStrategy: (Int) -> MeasureStrategy,
         itemContent: @Composable CanvasChildScope.(index: Int) -> Unit
     ) {
@@ -221,6 +294,7 @@ private class ItemsHostImpl(
                 CanvasItemState(
                     layout = { layoutInfo(i) },
                     content = { itemContent(i) },
+                    measureStrategy = { measureStrategy(i) },
                     key = key?.invoke(i) ?: i
                 )
             )
@@ -230,7 +304,7 @@ private class ItemsHostImpl(
     override fun <T : Any> items(
         items: List<T>,
         key: ((T) -> Any)?,
-        layoutInfo: (T) -> Rect,
+        layoutInfo: (T) -> CanvasItemLayout,
         measureStrategy: (T) -> MeasureStrategy,
         itemContent: @Composable (CanvasChildScope.(item: T) -> Unit)
     ) {
@@ -238,6 +312,7 @@ private class ItemsHostImpl(
             CanvasItemState(
                 layout = { layoutInfo(it) },
                 content = { itemContent(it) },
+                measureStrategy = { measureStrategy(it) },
                 key = key?.invoke(it) ?: it
             )
         })
@@ -246,8 +321,11 @@ private class ItemsHostImpl(
 
 private data class VisibleItem(
     val index: Int,
+    val zIndex: Float,
+    val updateTime: Long,
     val renderRect: Rect,
-    val logicRect: Rect
+    val logicRect: Rect,
+    val measureStrategy: MeasureStrategy? = null,
 )
 
 private class CanvasItemsProvider(
