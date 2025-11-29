@@ -34,9 +34,9 @@ fun CanvasBox(
     modifier: Modifier = Modifier,
     onViewportChanged: ((Rect) -> Unit)? = null,
     gridCellWidth: Float = 10f,
-    xAxisColor: Color = Color(0xFFB0BEC5),
-    yAxisColor: Color = Color(0xFFB0BEC5),
-    gridColor: Color = Color(0xFFEEEEEE),
+    xAxisColor: Color = Color.Blue.copy(0.3f),
+    yAxisColor: Color = Color.Red.copy(0.3f),
+    gridColor: Color = Color(0xFF787878).copy(0.3f),
     content: @Composable CanvasItemsScope.() -> Unit
 ) {
     val itemsHost = remember { ItemsHostImpl(state) }
@@ -157,16 +157,28 @@ fun Modifier.drawBgGrid(
     while (x <= endX) {
         val p1 = t.logicToRender(Offset(x, startY))
         val p2 = t.logicToRender(Offset(x, endY))
-        val stroke = if (abs(x - floor(x / 100f) * 100f) < 1e-3f) 2f else 1f
-        drawLine(normalLineColor, p1, p2, stroke)
+        val isMajor = abs(x - floor(x / 100f) * 100f) < 1e-3f
+        val stroke = when {
+            isMajor && state.scale < 0.5f -> 1f
+            isMajor -> 2f
+            state.scale < 0.5f -> 0f
+            else -> 1f
+        }
+        if (stroke > 0f) drawLine(normalLineColor, p1, p2, stroke)
         x += cellWidth
     }
     var y = startY
     while (y <= endY) {
         val p1 = t.logicToRender(Offset(startX, y))
         val p2 = t.logicToRender(Offset(endX, y))
-        val stroke = if (abs(y - floor(y / 100f) * 100f) < 1e-3f) 2f else 1f
-        drawLine(normalLineColor, p1, p2, stroke)
+        val isMajor = abs(y - floor(y / 100f) * 100f) < 1e-3f
+        val stroke = when {
+            isMajor && state.scale < 0.5f -> 1f
+            isMajor -> 2f
+            state.scale < 0.5f -> 0f
+            else -> 1f
+        }
+        if (stroke > 0f) drawLine(normalLineColor, p1, p2, stroke)
         y += cellWidth
     }
     if (logic.left <= 0f && logic.right >= 0f) {
