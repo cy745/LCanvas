@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.abs
@@ -113,18 +115,17 @@ fun CanvasBox(
                 val t = state.transform()
                 val visible = mutableListOf<VisibleItem>()
                 for (i in itemsHost.states.indices) {
-                    val layout = itemsHost.states[i].layout()
+                    val itemState = itemsHost.states[i]
+                    val layout = itemState.layout()
                     if (!layout.isVisible) continue
 
                     val logicRect = layout.rect
                     var renderRect = t.logicToRender(logicRect)
-                    var measureStrategy: MeasureStrategy? = null
-                    val scStrategy = itemsHost.states[i].scaleStrategy()
+                    val scStrategy = itemState.scaleStrategy()
 
-                    // 若元素的逻辑矩形和渲染矩形都为空，则需要处理用户测量策略
-                    if (logicRect.isEmpty && renderRect.isEmpty) {
-                        measureStrategy = itemsHost.states[i].measureStrategy()
-                        renderRect = when (measureStrategy) {
+                    // 若元素未被测量，则使用measureStrategy，进行处理
+                    if (!layout.isMeasured) {
+                        renderRect = when (val measureStrategy = itemState.measureStrategy()) {
                             is MeasureStrategy.WrapContent -> {
                                 Rect(
                                     offset = renderRect.topLeft,
@@ -155,8 +156,8 @@ fun CanvasBox(
                                 renderRect = renderRect,
                                 logicRect = logicRect,
                                 updateTime = layout.updateTime,
-                                measureStrategy = measureStrategy,
-                                scaleStrategy = scStrategy
+                                scaleStrategy = scStrategy,
+                                isMeasured = layout.isMeasured
                             )
                         )
                     }
@@ -179,6 +180,7 @@ fun CanvasBox(
                                         v.renderRect.width.toInt().coerceAtLeast(0),
                                         v.renderRect.height.toInt().coerceAtLeast(0)
                                     )
+
                                     is ScaleStrategy.ScaleInRender -> Constraints.fixed(
                                         v.logicRect.width.toInt().coerceAtLeast(0),
                                         v.logicRect.height.toInt().coerceAtLeast(0)
@@ -188,9 +190,10 @@ fun CanvasBox(
 
                         val measurables = compose(v.index)
                         val p = measurables.first().measure(childConstraints)
+                        val itemState = itemsHost.states[v.index]
 
-                        // 处理用户测量策略
-                        if (v.measureStrategy is MeasureStrategy.WrapContent) {
+                        // 若元素先前未被测量，则此时把元素的测量结果返回给CanvasItem
+                        if (!v.isMeasured) {
                             val newLogicRect = t.renderToLogic(
                                 Rect(
                                     offset = v.renderRect.topLeft,
@@ -200,7 +203,14 @@ fun CanvasBox(
                                     )
                                 )
                             )
-                            v.measureStrategy.onMeasured(newLogicRect)
+
+                            if (!newLogicRect.isEmpty) {
+                                val newLayout = itemState.layout().copy(
+                                    rect = newLogicRect,
+                                    isMeasured = true
+                                )
+                                itemState.onUpdateLayout(newLayout)
+                            }
                         }
 
                         Pair(v, p)
@@ -276,6 +286,7 @@ fun Modifier.drawBgGrid(
 @Immutable
 data class CanvasItemState(
     val layout: () -> CanvasItemLayout,
+    val onUpdateLayout: (CanvasItemLayout) -> Unit,
     val measureStrategy: () -> MeasureStrategy,
     val scaleStrategy: () -> ScaleStrategy,
     val content: @Composable CanvasChildScope.() -> Unit,
@@ -295,6 +306,7 @@ private class ItemsHostImpl(
         count: Int,
         key: ((Int) -> Any)?,
         layoutInfo: (Int) -> CanvasItemLayout,
+        onUpdateLayoutInfo: (Int, CanvasItemLayout) -> Unit,
         measureStrategy: (Int) -> MeasureStrategy,
         scaleStrategy: (Int) -> ScaleStrategy,
         itemContent: @Composable CanvasChildScope.(index: Int) -> Unit
@@ -303,6 +315,7 @@ private class ItemsHostImpl(
             states.add(
                 CanvasItemState(
                     layout = { layoutInfo(i) },
+                    onUpdateLayout = { onUpdateLayoutInfo(i, it) },
                     content = { itemContent(i) },
                     measureStrategy = { measureStrategy(i) },
                     scaleStrategy = { scaleStrategy(i) },
@@ -316,17 +329,19 @@ private class ItemsHostImpl(
         items: List<T>,
         key: ((T) -> Any)?,
         layoutInfo: (T) -> CanvasItemLayout,
+        onUpdateLayoutInfo: (T, CanvasItemLayout) -> Unit,
         measureStrategy: (T) -> MeasureStrategy,
         scaleStrategy: (T) -> ScaleStrategy,
         itemContent: @Composable (CanvasChildScope.(item: T) -> Unit)
     ) {
-        states.addAll(items.map {
+        states.addAll(items.map { item ->
             CanvasItemState(
-                layout = { layoutInfo(it) },
-                content = { itemContent(it) },
-                measureStrategy = { measureStrategy(it) },
-                scaleStrategy = { scaleStrategy(it) },
-                key = key?.invoke(it) ?: it
+                layout = { layoutInfo(item) },
+                onUpdateLayout = { onUpdateLayoutInfo(item, it) },
+                content = { itemContent(item) },
+                measureStrategy = { measureStrategy(item) },
+                scaleStrategy = { scaleStrategy(item) },
+                key = key?.invoke(item) ?: item
             )
         })
     }
@@ -338,7 +353,7 @@ private data class VisibleItem(
     val updateTime: Long,
     val renderRect: Rect,
     val logicRect: Rect,
-    val measureStrategy: MeasureStrategy? = null,
+    val isMeasured: Boolean,
     val scaleStrategy: ScaleStrategy = ScaleStrategy.ScaleInMeasure,
 )
 
@@ -351,18 +366,26 @@ private class CanvasItemsProvider(
 
     @Composable
     override fun Item(index: Int, key: Any) {
-        val childScope = CanvasChildScope(
-            transform = state.transform(),
-            scale = state.scale,
-            scaleStrategy = host.states[index].scaleStrategy(),
-        )
-
         var itemState = host.states[index]
         if (itemState.key != key) {
             itemState = host.states.firstOrNull { it.key == key }
                 ?: itemState
         }
 
-        itemState.content.invoke(childScope)
+        val childScope = CanvasChildScope(
+            transform = state.transform(),
+            scale = state.scale,
+            scaleStrategy = itemState.scaleStrategy()
+        )
+
+        Box(
+            modifier = Modifier.graphicsLayer {
+                if (itemState.scaleStrategy() == ScaleStrategy.ScaleInRender) {
+                    transformOrigin = TransformOrigin.Center.copy(0f, 0f)
+                    scaleX = state.scale
+                    scaleY = state.scale
+                }
+            }, content = { itemState.content.invoke(childScope) }
+        )
     }
 }
