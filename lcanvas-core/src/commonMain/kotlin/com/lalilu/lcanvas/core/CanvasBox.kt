@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.abs
 
 expect fun Modifier.pointerScroll(onScroll: (PointerEvent) -> Unit): Modifier
 
@@ -32,6 +33,10 @@ fun CanvasBox(
     state: CanvasState,
     modifier: Modifier = Modifier,
     onViewportChanged: ((Rect) -> Unit)? = null,
+    gridCellWidth: Float = 10f,
+    xAxisColor: Color = Color(0xFFB0BEC5),
+    yAxisColor: Color = Color(0xFFB0BEC5),
+    gridColor: Color = Color(0xFFEEEEEE),
     content: @Composable CanvasItemsScope.() -> Unit
 ) {
     val itemsHost = remember { ItemsHostImpl(state) }
@@ -79,29 +84,13 @@ fun CanvasBox(
                     )
                 }
             }
-            .drawBehind {
-                val grid = 10f
-                val t = state.transform()
-                val logic = state.viewportLogicRect()
-                val startX = floor(logic.left / grid) * grid
-                val endX = ceil(logic.right / grid) * grid
-                val startY = floor(logic.top / grid) * grid
-                val endY = ceil(logic.bottom / grid) * grid
-                var x = startX
-                while (x <= endX) {
-                    val p1 = t.logicToRender(Offset(x, startY))
-                    val p2 = t.logicToRender(Offset(x, endY))
-                    drawLine(Color(0xFFEEEEEE), p1, p2, 1f)
-                    x += grid
-                }
-                var y = startY
-                while (y <= endY) {
-                    val p1 = t.logicToRender(Offset(startX, y))
-                    val p2 = t.logicToRender(Offset(endX, y))
-                    drawLine(Color(0xFFEEEEEE), p1, p2, 1f)
-                    y += grid
-                }
-            }
+            .drawBgGrid(
+                state = state,
+                cellWidth = gridCellWidth,
+                xBaseLineColor = xAxisColor,
+                yBaseLineColor = yAxisColor,
+                normalLineColor = gridColor,
+            )
     ) {
         itemsHost.reset()
         content(CanvasScope(itemsHost))
@@ -148,6 +137,47 @@ fun CanvasBox(
                 }
             }
         )
+    }
+}
+
+fun Modifier.drawBgGrid(
+    state: CanvasState,
+    cellWidth: Float = 100f,
+    xBaseLineColor: Color = Color.Blue,
+    yBaseLineColor: Color = Color.Red,
+    normalLineColor: Color = Color(0xFFEEEEEE),
+) = drawBehind {
+    val t = state.transform()
+    val logic = state.viewportLogicRect()
+    val startX = floor(logic.left / cellWidth) * cellWidth
+    val endX = ceil(logic.right / cellWidth) * cellWidth
+    val startY = floor(logic.top / cellWidth) * cellWidth
+    val endY = ceil(logic.bottom / cellWidth) * cellWidth
+    var x = startX
+    while (x <= endX) {
+        val p1 = t.logicToRender(Offset(x, startY))
+        val p2 = t.logicToRender(Offset(x, endY))
+        val stroke = if (abs(x - floor(x / 100f) * 100f) < 1e-3f) 2f else 1f
+        drawLine(normalLineColor, p1, p2, stroke)
+        x += cellWidth
+    }
+    var y = startY
+    while (y <= endY) {
+        val p1 = t.logicToRender(Offset(startX, y))
+        val p2 = t.logicToRender(Offset(endX, y))
+        val stroke = if (abs(y - floor(y / 100f) * 100f) < 1e-3f) 2f else 1f
+        drawLine(normalLineColor, p1, p2, stroke)
+        y += cellWidth
+    }
+    if (logic.left <= 0f && logic.right >= 0f) {
+        val p1 = t.logicToRender(Offset(0f, startY))
+        val p2 = t.logicToRender(Offset(0f, endY))
+        drawLine(xBaseLineColor, p1, p2, 3f)
+    }
+    if (logic.top <= 0f && logic.bottom >= 0f) {
+        val p1 = t.logicToRender(Offset(startX, 0f))
+        val p2 = t.logicToRender(Offset(endX, 0f))
+        drawLine(yBaseLineColor, p1, p2, 3f)
     }
 }
 
